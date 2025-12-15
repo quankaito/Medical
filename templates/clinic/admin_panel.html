@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2 class="text-uppercase fw-bold text-dark border-bottom pb-2">
+            <i class="fas fa-cogs"></i> Quản Trị Hệ Thống Oracle
+        </h2>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow h-100">
+            <div class="card-header bg-dark text-white d-flex justify-content-between">
+                <h5 class="m-0"><i class="fas fa-users-cog"></i> Tài Khoản & Trạng Thái</h5>
+                <span class="badge bg-danger">Profile: CLINIC_SECURE_PROFILE</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Trạng Thái</th>
+                            <th>Profile</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td><strong>{{ u.username }}</strong></td>
+                            <td>
+                                {% if 'LOCKED' in u.status %}
+                                <span class="badge bg-danger">BỊ KHÓA</span>
+                                <small class="d-block text-muted">{{ u.lock_date }}</small>
+                                {% else %}
+                                <span class="badge bg-success">HOẠT ĐỘNG</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ u.profile }}</td>
+                            <td>
+                                {% if 'LOCKED' in u.status %}
+                                <a href="{% url 'unlock_user' u.username %}" class="btn btn-sm btn-warning fw-bold">
+                                    <i class="fas fa-unlock"></i> Mở Khóa
+                                </a>
+                                {% else %}
+                                <span class="text-muted"><i class="fas fa-check"></i></span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="m-0"><i class="fas fa-hdd"></i> Dung Lượng Tablespace</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tên Tablespace</th>
+                            <th>Dung Lượng (MB)</th>
+                            <th>Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in tablespaces %}
+                        <tr class="{% if t.name == 'CLINIC_TBS' %}table-info fw-bold{% endif %}">
+                            <td>{{ t.name }}</td>
+                            <td>{{ t.size }} MB</td>
+                            <td><span class="badge bg-info">{{ t.status }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="m-0"><i class="fas fa-network-wired"></i> Phiên Làm Việc (Active Sessions)</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>SID, Serial#</th>
+                            <th>User Oracle</th>
+                            <th>OS User / Machine</th>
+                            <th>Trạng Thái</th>
+                            <th>Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in sessions %}
+                        <tr>
+                            <td>{{ s.sid }}, {{ s.serial }}</td>
+                            <td class="fw-bold text-primary">{{ s.username }}</td>
+                            <td>{{ s.osuser }} @ {{ s.machine }}<br><small>{{ s.program }}</small></td>
+                            <td>
+                                {% if s.status == 'ACTIVE' %}
+                                <span class="badge bg-success">ACTIVE</span>
+                                {% else %}
+                                <span class="badge bg-secondary">INACTIVE</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if s.username != request.session.db_user and s.username != 'CLINIC_ADMIN' %}
+                                <a href="{% url 'kill_session' s.sid s.serial %}" class="btn btn-sm btn-outline-danger"
+                                    onclick="return confirm('Ngắt kết nối session này?');">
+                                    <i class="fas fa-skull"></i> Kill
+                                </a>
+                                {% else %}
+                                <span class="text-muted small">(Current/Admin)</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

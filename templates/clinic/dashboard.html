@@ -1,0 +1,564 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12 text-center">
+        <h2 class="text-uppercase fw-bold text-primary">Trung Tâm Điều Hành Bảo Mật</h2>
+        <p class="text-muted">Hệ thống quản lý Y tế SecureClinic - Mã hóa Đa lớp & Phân quyền RBAC</p>
+
+        {% if request.session.user_role %}
+        <span class="badge bg-dark">Role: {{ request.session.user_role }}</span>
+        {% else %}
+        <span class="badge bg-secondary">Role: User (Chưa phân quyền)</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    {% if perms.can_view_salary %}
+    <div class="col-lg-12 mb-4">
+        <div class="card border-top border-4 border-warning shadow-sm">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 fw-bold text-warning"><i class="fas fa-user-nurse me-2"></i>Nhân Sự (Lương AES-256)</h5>
+
+                {% if perms.can_manage_staff %}
+                <button class="btn btn-warning btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addStaffModal"><i
+                        class="fas fa-plus"></i> Thêm</button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã NV</th>
+                            <th>Thông Tin</th>
+                            <th>Lương (AES Oracle)</th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for nv in nhanviens %}
+                        <tr>
+                            <td><strong>{{ nv.manv }}</strong></td>
+                            <td>{{ nv.hoten }}<br><small class="text-muted">{{ nv.chucvu }}</small></td>
+                            <td style="max-width: 200px;">
+                                <span id="sal-{{ nv.manv }}" class="text-muted small text-truncate d-block"
+                                    data-state="enc">{{ nv.luong_enc }}</span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary"
+                                    onclick="toggleDecrypt('{{ nv.manv }}', '{{ nv.luong_enc }}', 'salary')"><i
+                                        class="fas fa-eye"></i></button>
+
+                                {% if perms.can_manage_staff %}
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+                                    data-bs-target="#editStaffModal{{ nv.manv }}"><i class="fas fa-edit"></i></button>
+
+                                {% if request.session.db_user == 'CLINIC_ADMIN' %}
+                                <a href="{% url 'delete_staff' nv.manv %}" class="btn btn-sm btn-outline-danger"
+                                    onclick="return confirm('Xóa?');"><i class="fas fa-trash"></i></a>
+                                {% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        {% if perms.can_manage_staff %}
+                        <div class="modal fade" id="editStaffModal{{ nv.manv }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{% url 'edit_staff' nv.manv %}" method="POST">
+                                        {% csrf_token %}
+                                        <div class="modal-header bg-warning">
+                                            <h5 class="modal-title">Sửa: {{ nv.hoten }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-2">
+                                                <label>Họ Tên</label>
+                                                <input type="text" name="hoten" class="form-control"
+                                                    value="{{ nv.hoten }}" required>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label>Email</label>
+                                                <input type="email" name="email" class="form-control"
+                                                    value="{{ nv.email }}" required>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label>Chức Vụ</label>
+                                                <select name="chucvu" class="form-select">
+                                                    <option value="BacSi" {% if nv.is_bacsi %}selected{% endif %}>Bác Sĩ
+                                                    </option>
+                                                    <option value="YTa" {% if nv.is_yta %}selected{% endif %}>Y Tá
+                                                    </option>
+                                                    <option value="LeTan" {% if nv.is_letan %}selected{% endif %}>Lễ Tân
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="text-danger fw-bold">Lương Mới (Auto Encrypt)</label>
+                                                <input type="number" name="luong" class="form-control border-danger"
+                                                    placeholder="Nhập lương mới..." required>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-primary">Lưu</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="col-lg-12 mb-4">
+        <div class="card border-top border-4 border-success shadow-sm">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 fw-bold text-success"><i class="fas fa-procedures me-2"></i>Bệnh Nhân (RSA DB)</h5>
+                {% if not perms.is_ketoan %}
+                <button class="btn btn-success btn-sm fw-bold" data-bs-toggle="modal"
+                    data-bs-target="#addCustomerModal"><i class="fas fa-plus"></i> Thêm</button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã KH</th>
+                            <th>Thông Tin</th>
+                            <th>Bệnh Án (RSA Oracle)</th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for kh in khachhangs %}
+                        <tr>
+                            <td><strong>{{ kh.makh }}</strong></td>
+                            <td>{{ kh.hoten }}<br><small class="text-muted">{{ kh.sdt }}</small></td>
+                            <td style="max-width: 200px;">
+                                {% if perms.can_view_medical %}
+                                <span id="med-{{ kh.makh }}" class="text-muted small text-truncate d-block"
+                                    data-state="enc">{{ kh.benhan_enc }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Bị ẩn (Không có quyền)</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if perms.can_view_medical %}
+                                <button class="btn btn-sm btn-outline-success"
+                                    onclick="toggleDecrypt('{{ kh.makh }}', '{{ kh.benhan_enc }}', 'medical')"><i
+                                        class="fas fa-lock"></i></button>
+                                {% endif %}
+
+                                {% if not perms.is_ketoan %}
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+                                    data-bs-target="#editCustomerModal{{ kh.makh }}"><i
+                                        class="fas fa-edit"></i></button>
+                                <a href="{% url 'delete_customer' kh.makh %}" class="btn btn-sm btn-outline-danger"
+                                    onclick="return confirm('Xóa?');"><i class="fas fa-trash"></i></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        <div class="modal fade" id="editCustomerModal{{ kh.makh }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{% url 'edit_customer' kh.makh %}" method="POST">
+                                        {% csrf_token %}
+                                        <div class="modal-header bg-success text-white">
+                                            <h5 class="modal-title">Sửa: {{ kh.hoten }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-2">
+                                                <label>Họ Tên</label>
+                                                <input type="text" name="hoten" class="form-control"
+                                                    value="{{ kh.hoten }}" required>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label>SĐT</label>
+                                                <input type="text" name="sdt" class="form-control" value="{{ kh.sdt }}"
+                                                    required>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="text-danger fw-bold">Bệnh Án Mới (Auto RSA
+                                                    Encrypt)</label>
+                                                <textarea name="benhan" class="form-control border-danger" required
+                                                    placeholder="Nhập bệnh án mới..."></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="submit" class="btn btn-success">Lưu</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card border-top border-4 border-info shadow-sm h-100">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 fw-bold text-info"><i class="fas fa-calendar-alt me-2"></i>Lịch Hẹn (AES App)</h5>
+                {% if perms.can_add_appt %}
+                <button class="btn btn-info btn-sm text-white fw-bold" data-bs-toggle="modal"
+                    data-bs-target="#addApptModal"><i class="fas fa-plus"></i></button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã</th>
+                            <th>Chi Tiết</th>
+                            <th>Ghi Chú</th>
+                            <th>Xử Lý</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lh in lichhens %}
+                        <tr>
+                            <td>{{ lh.ma_lh }}</td>
+                            <td><small>{{ lh.kh_ten }}<br>{{ lh.ngay_hen|date:"d/m/Y" }}</small></td>
+                            <td style="max-width: 100px;">
+                                <span id="appt-{{ lh.ma_lh }}" class="text-muted small text-truncate d-block"
+                                    data-state="enc">{{ lh.ghi_chu_enc }}</span>
+                            </td>
+                            <td>
+                                <a href="javascript:void(0)"
+                                    onclick="apiDecrypt('appt', '{{ lh.ma_lh }}', '{{ lh.ghi_chu_enc }}')">👁️</a>
+                                {% if not perms.is_ketoan %}
+                                <a href="javascript:void(0)" data-bs-toggle="modal"
+                                    data-bs-target="#editApptModal{{ lh.ma_lh }}" class="text-secondary mx-1"><i
+                                        class="fas fa-edit"></i></a>
+                                <a href="{% url 'delete_appointment' lh.ma_lh %}" class="text-danger"
+                                    onclick="return confirm('Xóa?');"><i class="fas fa-trash"></i></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <div class="modal fade" id="editApptModal{{ lh.ma_lh }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{% url 'edit_appointment' lh.ma_lh %}" method="POST">{% csrf_token %}
+                                        <div class="modal-header bg-info text-white">
+                                            <h5 class="modal-title">Sửa Lịch: {{ lh.ma_lh }}</h5><button type="button"
+                                                class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body"><label>Ngày Hẹn Mới</label><input type="date"
+                                                name="ngay_hen" class="form-control mb-2" required><label
+                                                class="text-danger">Ghi Chú Mới (Auto AES App)</label><textarea
+                                                name="ghi_chu" class="form-control border-info" required></textarea>
+                                        </div>
+                                        <div class="modal-footer"><button type="submit"
+                                                class="btn btn-info text-white">Lưu</button></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% if perms.can_view_medical %}
+    <div class="col-lg-6 mb-4">
+        <div class="card border-top border-4 border-danger shadow-sm h-100">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 fw-bold text-danger"><i class="fas fa-file-medical-alt me-2"></i>Hồ Sơ (Hybrid)</h5>
+                {% if perms.is_bacsi or perms.is_admin %}
+                <button class="btn btn-danger btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addRecordModal"><i
+                        class="fas fa-plus"></i></button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã</th>
+                            <th>BN</th>
+                            <th>Chẩn Đoán</th>
+                            <th>Xử Lý</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hs in hosos %}
+                        <tr>
+                            <td>{{ hs.ma_hs }}</td>
+                            <td><small>{{ hs.kh_ten }}<br>{{ hs.ngay|date:"d/m" }}</small></td>
+                            <td style="max-width: 100px;">
+                                <span id="rec-{{ hs.ma_hs }}" class="text-muted small text-truncate d-block"
+                                    data-state="enc">{{ hs.chan_doan_enc }}</span>
+                            </td>
+                            <td>
+                                <a href="javascript:void(0)" onclick="apiDecrypt('record', '{{ hs.ma_hs }}', '')">🔐</a>
+                                {% if perms.is_bacsi or perms.is_admin %}
+                                <a href="javascript:void(0)" data-bs-toggle="modal"
+                                    data-bs-target="#editRecordModal{{ hs.ma_hs }}" class="text-secondary mx-1"><i
+                                        class="fas fa-edit"></i></a>
+                                <a href="{% url 'delete_record' hs.ma_hs %}" class="text-danger"
+                                    onclick="return confirm('Xóa?');"><i class="fas fa-trash"></i></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <div class="modal fade" id="editRecordModal{{ hs.ma_hs }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{% url 'edit_record' hs.ma_hs %}" method="POST">{% csrf_token %}<div
+                                            class="modal-header bg-danger text-white">
+                                            <h5 class="modal-title">Sửa Hồ Sơ: {{ hs.ma_hs }}</h5><button type="button"
+                                                class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body"><label class="text-danger">Chẩn Đoán Mới (Auto
+                                                Hybrid)</label><textarea name="chan_doan"
+                                                class="form-control border-danger" rows="4" required></textarea></div>
+                                        <div class="modal-footer"><button type="submit"
+                                                class="btn btn-danger">Lưu</button></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if perms.can_view_opinion %}
+    <div class="col-lg-12 mb-4">
+        <div class="card border-top border-4 border-dark shadow-sm">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h5 class="m-0 fw-bold text-dark"><i class="fas fa-user-secret me-2"></i>Ý Kiến Riêng (RSA App Direct)
+                </h5>
+                {% if perms.is_bacsi or perms.is_admin %}
+                <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addOpinionModal"><i
+                        class="fas fa-plus"></i> Thêm Ý Kiến</button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã YK</th>
+                            <th>Từ BS -> BN</th>
+                            <th>Nội Dung (RSA Trực tiếp)</th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for yk in ykiens %}
+                        <tr>
+                            <td>{{ yk.ma_yk }}</td>
+                            <td><small>{{ yk.bs_ten }} <i class="fas fa-arrow-right"></i> {{ yk.kh_ten }}</small></td>
+                            <td style="max-width: 300px;">
+                                <span id="op-{{ yk.ma_yk }}" class="text-muted small text-truncate d-block"
+                                    data-state="enc">{{ yk.noi_dung_enc }}</span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-dark"
+                                    onclick="apiDecrypt('opinion', '{{ yk.ma_yk }}', '{{ yk.noi_dung_enc }}')"><i
+                                        class="fas fa-key"></i></button>
+                                {% if perms.is_bacsi or perms.is_admin %}
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+                                    data-bs-target="#editOpinionModal{{ yk.ma_yk }}"><i
+                                        class="fas fa-edit"></i></button>
+                                <a href="{% url 'delete_opinion' yk.ma_yk %}" class="btn btn-sm btn-outline-danger"
+                                    onclick="return confirm('Xóa?');"><i class="fas fa-trash"></i></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <div class="modal fade" id="editOpinionModal{{ yk.ma_yk }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form action="{% url 'edit_opinion' yk.ma_yk %}" method="POST">{% csrf_token %}<div
+                                            class="modal-header bg-dark text-white">
+                                            <h5 class="modal-title">Sửa Ý Kiến: {{ yk.ma_yk }}</h5><button type="button"
+                                                class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body"><label class="fw-bold">Nội Dung Mới</label><textarea
+                                                name="noi_dung" class="form-control border-dark" rows="3" required
+                                                placeholder="Nhập nội dung sửa đổi (Auto RSA Encrypt)..."></textarea>
+                                        </div>
+                                        <div class="modal-footer"><button type="submit" class="btn btn-dark">Lưu Thay
+                                                Đổi</button></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="addStaffModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{% url 'add_staff' %}" method="POST">{% csrf_token %}<div class="modal-header bg-warning">
+                    <h5 class="modal-title">Thêm Nhân Viên Mới</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-6"><input type="text" name="manv" class="form-control mb-2" placeholder="Mã NV"
+                                required></div>
+                        <div class="col-6"><input type="text" name="cccd" class="form-control mb-2" placeholder="CCCD"
+                                required></div>
+                    </div><input type="text" name="hoten" class="form-control mb-2" placeholder="Họ Tên" required><input
+                        type="email" name="email" class="form-control mb-2" placeholder="Email" required><select
+                        name="chucvu" class="form-select mb-2">
+                        <option value="BacSi">Bác Sĩ</option>
+                        <option value="YTa">Y Tá</option>
+                        <option value="LeTan">Lễ Tân</option>
+                    </select>
+                    <div class="mb-2"><label class="text-danger fw-bold">Lương (Sẽ Auto Encrypt AES)</label><input
+                            type="number" name="luong" class="form-control border-danger" required></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">Thêm Mới</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{% url 'add_customer' %}" method="POST">{% csrf_token %}<div
+                    class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Thêm Hồ Sơ Bệnh Án</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2"><label>Mã KH</label><input type="text" name="makh" class="form-control" required>
+                    </div>
+                    <div class="mb-2"><label>Họ Tên</label><input type="text" name="hoten" class="form-control"
+                            required></div>
+                    <div class="row">
+                        <div class="col-6 mb-2"><label>Ngày Sinh</label><input type="date" name="ngaysinh"
+                                class="form-control" required></div>
+                        <div class="col-6 mb-2"><label>SĐT</label><input type="text" name="sdt" class="form-control"
+                                required></div>
+                    </div>
+                    <div class="mb-2"><label class="text-danger fw-bold">Bệnh Án (Sẽ Auto Encrypt RSA)</label><textarea
+                            name="benhan" class="form-control border-danger" rows="3" required></textarea></div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-success">Lưu Hồ Sơ</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addApptModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{% url 'add_appointment' %}" method="POST">{% csrf_token %}<div
+                    class="modal-header bg-info text-white">
+                    <h5 class="modal-title">Thêm Lịch Hẹn</h5>
+                </div>
+                <div class="modal-body"><input type="text" name="ma_lh" class="form-control mb-2" placeholder="Mã LH"
+                        required><select name="ma_kh" class="form-select mb-2">{% for kh in khachhangs %}<option
+                            value="{{ kh.makh }}">{{ kh.hoten }}</option>{% endfor %}</select><select name="manv"
+                        class="form-select mb-2">{% for nv in nhanviens %}<option value="{{ nv.manv }}">{{ nv.hoten }}
+                        </option>{% endfor %}</select><input type="date" name="ngay_hen" class="form-control mb-2"
+                        required><textarea name="ghi_chu" class="form-control border-info"
+                        placeholder="Ghi chú (AES App)..." required></textarea></div>
+                <div class="modal-footer"><button type="submit" class="btn btn-info text-white">Thêm</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addRecordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{% url 'add_record' %}" method="POST">{% csrf_token %}<div
+                    class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Thêm Hồ Sơ</h5>
+                </div>
+                <div class="modal-body"><input type="text" name="ma_hs" class="form-control mb-2" placeholder="Mã HS"
+                        required><select name="ma_kh" class="form-select mb-2">{% for kh in khachhangs %}<option
+                            value="{{ kh.makh }}">{{ kh.hoten }}</option>{% endfor %}</select><textarea name="chan_doan"
+                        class="form-control border-danger" placeholder="Chẩn đoán (Hybrid)..." required
+                        rows="4"></textarea></div>
+                <div class="modal-footer"><button type="submit" class="btn btn-danger">Thêm</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="addOpinionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{% url 'add_opinion' %}" method="POST">{% csrf_token %}<div
+                    class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Thêm Ý Kiến Riêng</h5>
+                </div>
+                <div class="modal-body"><input type="text" name="ma_yk" class="form-control mb-2" placeholder="Mã YK"
+                        required><select name="manv" class="form-select mb-2">{% for nv in nhanviens %}<option
+                            value="{{ nv.manv }}">{{ nv.hoten }} (BS)</option>{% endfor %}</select><select name="ma_kh"
+                        class="form-select mb-2">{% for kh in khachhangs %}<option value="{{ kh.makh }}">{{ kh.hoten }}
+                            (BN)</option>{% endfor %}</select><textarea name="noi_dung" class="form-control border-dark"
+                        placeholder="Nội dung mật (RSA App Direct)..." required rows="3"></textarea></div>
+                <div class="modal-footer"><button type="submit" class="btn btn-dark">Thêm</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Hàm giải mã chung cho DB
+    function toggleDecrypt(id, val, type) {
+        let spanId = (type === 'salary') ? `sal-${id}` : `med-${id}`;
+        let span = document.getElementById(spanId);
+        let url = (type === 'salary') ? `/api/decrypt-salary/?val=${encodeURIComponent(val)}` : `/api/decrypt-medical/?val=${encodeURIComponent(val)}`;
+
+        if (span.getAttribute('data-state') === 'enc') {
+            span.innerHTML = '...';
+            fetch(url).then(r => r.json()).then(d => {
+                span.innerText = d.decrypted;
+                span.setAttribute('data-state', 'dec');
+                span.classList.add('fw-bold', (type === 'salary' ? 'text-success' : 'text-danger'));
+            });
+        } else {
+            span.innerText = val;
+            span.setAttribute('data-state', 'enc');
+            span.classList.remove('fw-bold', 'text-success', 'text-danger');
+        }
+    }
+
+    // Hàm giải mã cho App (AES, Hybrid, RSA App)
+    function apiDecrypt(type, id, val) {
+        let spanId = '', url = '', colorClass = '';
+
+        if (type === 'appt') { spanId = `appt-${id}`; url = `/api/decrypt-appt/?val=${encodeURIComponent(val)}`; colorClass = 'text-info'; }
+        else if (type === 'record') { spanId = `rec-${id}`; url = `/api/decrypt-record/?id=${id}`; colorClass = 'text-danger'; }
+        else if (type === 'opinion') { spanId = `op-${id}`; url = `/api/decrypt-opinion/?val=${encodeURIComponent(val)}`; colorClass = 'text-dark'; }
+
+        let span = document.getElementById(spanId);
+
+        if (span.getAttribute('data-state') === 'enc') {
+            span.innerHTML = '...';
+            fetch(url).then(r => r.json()).then(d => {
+                span.innerText = d.decrypted;
+                span.setAttribute('data-state', 'dec');
+                span.classList.add('fw-bold', colorClass);
+            });
+        } else {
+            if (type === 'record') span.innerText = "(Đã ẩn)";
+            else span.innerText = val;
+            span.setAttribute('data-state', 'enc');
+            span.classList.remove('fw-bold', colorClass);
+        }
+    }
+</script>
+{% endblock %}

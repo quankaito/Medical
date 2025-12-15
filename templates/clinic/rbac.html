@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h2 class="fw-bold text-primary"><i class="fas fa-user-shield"></i> Quản Lý Phân Quyền (RBAC)</h2>
+        <p class="text-muted">Gán Role Oracle cho Nhân Viên để điều khiển truy cập dữ liệu</p>
+    </div>
+</div>
+
+<div class="card shadow">
+    <div class="card-header bg-primary text-white">
+        <h5 class="m-0">Danh Sách Người Dùng & Vai Trò</h5>
+    </div>
+    <div class="card-body">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>User Oracle</th>
+                    <th>Họ Tên</th>
+                    <th>Chức Vụ (App)</th>
+                    <th>Role Oracle (DB)</th>
+                    <th>Cấp Quyền Mới</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td class="fw-bold">{{ u.username }}</td>
+                    <td>{{ u.fullname }}</td>
+                    <td>{{ u.job_title }}</td>
+                    <td>
+                        {% if u.role_db == 'ROLE_BACSI' %}
+                        <span class="badge bg-success">BÁC SĨ</span>
+                        {% elif u.role_db == 'ROLE_YTA' %}
+                        <span class="badge bg-info">Y TÁ</span>
+                        {% elif u.role_db == 'ROLE_LETAN' %}
+                        <span class="badge bg-warning text-dark">LỄ TÂN</span>
+                        {% elif u.role_db == 'ROLE_KETOAN' %}
+                        <span class="badge bg-primary">KẾ TOÁN</span>
+                        {% elif u.role_db == 'ROLE_QUANLY' %}
+                        <span class="badge bg-dark">QUẢN LÝ</span>
+                        {% else %}
+                        <span class="badge bg-secondary">CHƯA CẤP</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form action="{% url 'grant_role' %}" method="POST" class="d-flex gap-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="username" value="{{ u.username }}">
+                            <select name="role" class="form-select form-select-sm" style="width: 150px;">
+                                <option value="">-- Chọn Role --</option>
+                                <option value="ROLE_BACSI">Bác Sĩ</option>
+                                <option value="ROLE_YTA">Y Tá</option>
+                                <option value="ROLE_LETAN">Lễ Tân</option>
+                                <option value="ROLE_KETOAN">Kế Toán</option>
+                                <option value="ROLE_QUANLY">Quản Lý</option>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-primary">Lưu</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

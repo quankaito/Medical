@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="text-center">
+    <h1>Chào mừng đến với SecureClinic</h1>
+    <p class="lead">Hệ thống quản lý phòng khám bảo mật cao cấp Oracle & Django</p>
+    {% if request.session.db_user %}
+    <div class="alert alert-info">
+        Bạn đang đăng nhập dưới định danh Oracle User: <strong>{{ request.session.db_user }}</strong>
+    </div>
+    {% else %}
+    <p>Vui lòng đăng nhập để tiếp tục.</p>
+    {% endif %}
+</div>
+{% endblock %}
