@@ -6,6 +6,9 @@ from .forms import LoginForm, RegisterForm
 import oracledb
 from .utils import AppAES, AppRSA # Import module vừa tạo
 import datetime
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+import binascii
 # --- BIẾN TOÀN CỤC GIẢ LẬP KHÓA AES CHO LỊCH HẸN ---
 # (Thực tế nên lưu vào bảng Keystore, nhưng để đơn giản ta dùng biến tĩnh cho demo)
 LICH_HEN_AES_KEY = b'ThisIsASecretKeyForAppointments!' # 32 bytes
@@ -15,6 +18,18 @@ def call_oracle_create_user(username, password):
         # Gọi procedure USP_TAO_USER_APP đã viết
         cursor.callproc('USP_TAO_USER_APP', [username, password])
 
+def load_rsa_key_from_db(key_name):
+    """Hàm phụ trợ để lấy Key từ bảng KEY_STORE"""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT KEY_VALUE FROM KEY_STORE WHERE KEY_NAME = %s", [key_name])
+            row = cursor.fetchone()
+            if row:
+                # Xử lý LOB nếu Oracle trả về LOB object
+                return row[0].read() if hasattr(row[0], 'read') else row[0]
+    except Exception as e:
+        print(f"Error loading key: {e}")
+    return None
 # --- VIEWS ---
 
 def home_view(request):
@@ -61,7 +76,7 @@ def login_view(request):
         if form.is_valid():
             username = form.cleaned_data['username'].upper()
             password = form.cleaned_data['password']
-            dsn = '172.17.68.194:1521/orclpdb'
+            dsn = '172.17.81.140:1521/orclpdb'
 
             try:
                 # 1. Thử kết nối Oracle
@@ -162,7 +177,7 @@ def dashboard_view(request):
             cursor = connection.cursor()
         else:
             # Nếu là User thường -> Connect bằng chính user đó để Oracle nhận diện (Kích hoạt VPD)
-            dsn = '172.17.68.194/orclpdb' # Đảm bảo DSN đúng với máy bạn
+            dsn = '172.17.81.140/orclpdb' # Đảm bảo DSN đúng với máy bạn
             target_conn = oracledb.connect(user=db_user, password=db_password, dsn=dsn)
             cursor = target_conn.cursor()
 
@@ -681,3 +696,175 @@ def grant_role(request):
             messages.error(request, f"Lỗi cấp quyền: {str(e)}")
             
     return redirect('rbac_panel')
+
+# --- CẬP NHẬT HÀM security_dashboard ---
+def security_dashboard(request):
+    if not is_oracle_logged_in(request) or request.session.get('db_user') != 'CLINIC_ADMIN':
+        messages.warning(request, "Chỉ Admin mới được vào khu vực an ninh!")
+        return redirect('home')
+
+    ols_data = []
+    doctor_labels = []
+    audit_logs = [] 
+    deleted_items = []
+
+    try:
+        with connection.cursor() as cursor:
+            # 1. Lấy dữ liệu OLS (Giữ nguyên code cũ)
+            sql_data = """
+                SELECT MAKH, HOTEN, 
+                       CASE OLS_LABEL WHEN 2000 THEN 'CONF' WHEN 1000 THEN 'PUB' ELSE 'UNKNOWN' END
+                FROM KHACH_HANG ORDER BY MAKH
+            """
+            cursor.execute(sql_data)
+            for r in cursor.fetchall():
+                ols_data.append({'makh': r[0], 'hoten': r[1], 'label': r[2]})
+
+            # 2. Lấy danh sách Bác sĩ (Giữ nguyên code cũ)
+            sql_users = """
+                SELECT N.MANV, N.HOTEN,
+                       NVL((SELECT MAX_READ_LABEL FROM DBA_SA_USERS 
+                            WHERE POLICY_NAME = 'OLS_BENH_AN' AND USER_NAME = N.MANV), 'CHƯA GÁN')
+                FROM NHAN_VIEN N WHERE N.CHUCVU IN ('BacSi', 'QuanLy') ORDER BY N.MANV
+            """
+            cursor.execute(sql_users)
+            for r in cursor.fetchall():
+                raw_label = r[2]
+                display_label = 'PUB (Thường)'
+                if 'CONF' in str(raw_label): display_label = 'CONF (VIP)'
+                doctor_labels.append({'manv': r[0], 'hoten': r[1], 'current_label': display_label, 'is_vip': 'CONF' in str(raw_label)})
+
+            # 3. === LẤY DỮ LIỆU FGA AUDIT (MỚI THÊM) ===
+            # Lấy 10 hành động gần nhất truy cập vào Lương
+            sql_audit = """
+                SELECT DB_USER, TIMESTAMP, SQL_TEXT, STATEMENT_TYPE 
+                FROM DBA_FGA_AUDIT_TRAIL 
+                WHERE OBJECT_NAME = 'NHAN_VIEN' AND POLICY_NAME = 'AUDIT_XEM_LUONG'
+                ORDER BY TIMESTAMP DESC 
+                FETCH FIRST 10 ROWS ONLY
+            """
+            cursor.execute(sql_audit)
+            for r in cursor.fetchall():
+                audit_logs.append({
+                    'user': r[0],
+                    'time': r[1],
+                    'sql': r[2], # Câu lệnh SQL thực thi
+                    'action': r[3] # SELECT hay UPDATE
+                })
+
+            # 4. === TÌM DỮ LIỆU ĐÃ BỊ XÓA (DÙNG FLASHBACK VERSIONS QUERY) ===
+            # Cách này mạnh hơn: Tìm tất cả các dòng có hành động Xóa (D) trong 15 phút qua
+            try:
+                sql_deleted = """
+                    SELECT MA_LH, MA_KH, MANV, NGAY_HEN 
+                    FROM LICH_HEN 
+                    VERSIONS BETWEEN TIMESTAMP (SYSTIMESTAMP - INTERVAL '15' MINUTE) AND SYSTIMESTAMP
+                    WHERE VERSIONS_OPERATION = 'D'  -- Chỉ lấy hành động DELETE
+                    AND MA_LH NOT IN (SELECT MA_LH FROM LICH_HEN) -- Đảm bảo nó chưa được khôi phục
+                """
+                cursor.execute(sql_deleted)
+                for r in cursor.fetchall():
+                    # Kiểm tra xem ID này đã có trong danh sách chưa để tránh trùng lặp
+                    # (Vì 1 ID có thể bị xóa đi tạo lại nhiều lần)
+                    if not any(item['ma_lh'] == r[0] for item in deleted_items):
+                        deleted_items.append({
+                            'ma_lh': r[0], 'ma_kh': r[1], 'manv': r[2], 'ngay_hen': r[3]
+                        })
+            except Exception as e:
+                if 'ORA-01466' in str(e):
+                    print("Flashback không khả dụng do cấu trúc bảng thay đổi.")
+                else:
+                    print(f"Lỗi Flashback View: {e}")
+
+    except Exception as e:
+        messages.error(request, f"Lỗi Security Dashboard: {str(e)}")
+
+    return render(request, 'clinic/security_dashboard.html', {
+        'ols_data': ols_data,
+        'doctor_labels': doctor_labels,
+        'audit_logs': audit_logs,
+        'deleted_items': deleted_items # Truyền sang template
+    })
+
+# --- THÊM HÀM MỚI: update_user_label ---
+def update_user_label(request):
+    """Hàm xử lý gán quyền VIP/THƯỜNG cho Bác sĩ"""
+    if request.method == 'POST':
+        manv = request.POST.get('manv')
+        level_code = request.POST.get('level_code') # 'CONF' hoặc 'PUB'
+        
+        try:
+            with connection.cursor() as cursor:
+                # Gọi thủ tục gán nhãn của OLS
+                # Set tất cả (Read/Write/Def/Row) về cùng 1 level để đồng bộ
+                sql = """
+                BEGIN
+                    SA_USER_ADMIN.SET_USER_LABELS (
+                        policy_name    => 'OLS_BENH_AN',
+                        user_name      => %s, 
+                        max_read_label => %s,
+                        max_write_label=> %s,
+                        def_label      => %s,
+                        row_label      => %s
+                    );
+                END;
+                """
+                cursor.execute(sql, [manv, level_code, level_code, level_code, level_code])
+            
+            label_text = "VIP (Xem hết)" if level_code == 'CONF' else "THƯỜNG (Chỉ xem thường)"
+            messages.success(request, f"Đã cấp quyền {label_text} cho {manv}")
+            
+        except Exception as e:
+            messages.error(request, f"Lỗi cấp quyền OLS: {str(e)}")
+            
+    return redirect('security_dashboard')
+
+# --- TRONG clinic/views.py ---
+
+def flashback_recovery(request):
+    """Hàm khôi phục dữ liệu Lịch Hẹn đã xóa (Phiên bản nâng cấp Versions Query)"""
+    if not is_oracle_logged_in(request) or request.session.get('db_user') != 'CLINIC_ADMIN':
+        return redirect('home')
+
+    if request.method == 'POST':
+        target_id = request.POST.get('target_id')
+        
+        try:
+            with connection.cursor() as cursor:
+                # 1. Kiểm tra tồn tại
+                cursor.execute("SELECT COUNT(*) FROM LICH_HEN WHERE MA_LH = %s", [target_id])
+                if cursor.fetchone()[0] > 0:
+                    messages.warning(request, f"Lịch hẹn {target_id} đã tồn tại!")
+                    return redirect('security_dashboard')
+
+                # 2. LẤY DỮ LIỆU TỪ PHIÊN BẢN ĐÃ BỊ XÓA
+                # Chúng ta tìm phiên bản 'D' (Delete) gần nhất của ID này
+                sql_flashback = """
+                    SELECT MA_LH, MA_KH, MANV, NGAY_HEN, GHI_CHU 
+                    FROM LICH_HEN 
+                    VERSIONS BETWEEN TIMESTAMP (SYSTIMESTAMP - INTERVAL '15' MINUTE) AND SYSTIMESTAMP
+                    WHERE MA_LH = %s 
+                    AND VERSIONS_OPERATION = 'D'
+                    ORDER BY VERSIONS_ENDTIME DESC
+                    FETCH FIRST 1 ROWS ONLY
+                """
+                cursor.execute(sql_flashback, [target_id])
+                row = cursor.fetchone()
+
+                if row:
+                    # 3. INSERT LẠI VÀO BẢNG
+                    ghi_chu_val = row[4].read() if hasattr(row[4], 'read') else row[4]
+                    
+                    sql_restore = """
+                        INSERT INTO LICH_HEN (MA_LH, MA_KH, MANV, NGAY_HEN, GHI_CHU)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(sql_restore, [row[0], row[1], row[2], row[3], ghi_chu_val])
+                    messages.success(request, f"Khôi phục thành công {target_id} (Dữ liệu từ phiên bản xóa gần nhất)!")
+                else:
+                    messages.error(request, f"Không tìm thấy dữ liệu gốc của {target_id} trong bộ nhớ Flashback.")
+
+        except Exception as e:
+            messages.error(request, f"Lỗi Flashback: {str(e)}")
+
+    return redirect('security_dashboard')

@@ -52,4 +52,7 @@ urlpatterns = [
     # --- PHẦN 6: RBAC ---
     path('rbac/', views.rbac_panel, name='rbac_panel'),
     path('rbac/grant/', views.grant_role, name='grant_role'),
+    path('security/', views.security_dashboard, name='security_dashboard'),
+    path('security/update_label/', views.update_user_label, name='update_user_label'),
+    path('security/flashback/', views.flashback_recovery, name='flashback_recovery'),
 ]

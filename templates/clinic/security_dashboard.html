@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h2 class="fw-bold text-danger"><i class="fas fa-shield-alt"></i> TRUNG TÂM GIÁM SÁT AN NINH</h2>
+        <p class="text-muted">Quản lý Oracle Label Security (OLS) & Phân Quyền Truy Cập Dữ Liệu Nhạy Cảm</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card shadow border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="m-0"><i class="fas fa-user-md"></i> Phân Quyền Truy Cập Hồ Sơ (User Labels)</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã BS</th>
+                            <th>Họ Tên</th>
+                            <th>Quyền Hiện Tại</th>
+                            <th>Cấp Lại Quyền</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in doctor_labels %}
+                        <tr>
+                            <td class="fw-bold">{{ doc.manv }}</td>
+                            <td>{{ doc.hoten }}</td>
+                            <td>
+                                {% if doc.is_vip %}
+                                <span class="badge bg-danger">VIP (CONF)</span>
+                                {% else %}
+                                <span class="badge bg-success">THƯỜNG (PUB)</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form action="{% url 'update_user_label' %}" method="POST" class="d-flex gap-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="manv" value="{{ doc.manv }}">
+
+                                    <button type="submit" name="level_code" value="PUB"
+                                        class="btn btn-sm {% if not doc.is_vip %}btn-success disabled{% else %}btn-outline-success{% endif %}">
+                                        <i class="fas fa-user"></i> Thường
+                                    </button>
+
+                                    <button type="submit" name="level_code" value="CONF"
+                                        class="btn btn-sm {% if doc.is_vip %}btn-danger disabled{% else %}btn-outline-danger{% endif %}">
+                                        <i class="fas fa-user-secret"></i> VIP
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="alert alert-warning small mb-0">
+                    <i class="fas fa-exclamation-triangle"></i> <b>Lưu ý:</b>
+                    Quyền <b>VIP</b> xem được cả bệnh nhân VIP và Thường.
+                    Quyền <b>Thường</b> chỉ xem được bệnh nhân Thường.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow border-danger mb-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="m-0"><i class="fas fa-tags"></i> Giám Sát Nhãn Dữ Liệu (Data Labels)</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã KH</th>
+                            <th>Bệnh Nhân</th>
+                            <th>Nhãn OLS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ols_data %}
+                        <tr>
+                            <td>{{ item.makh }}</td>
+                            <td>{{ item.hoten }}</td>
+                            <td class="text-center">
+                                {% if item.label == 'CONF' %}
+                                <span class="badge bg-danger">VIP (CONF)</span>
+                                {% else %}
+                                <span class="badge bg-success">THƯỜNG (PUB)</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center">Không có dữ liệu</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow border-dark">
+            <div class="col-12">
+                <div class="card shadow border-dark">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="m-0"><i class="fas fa-eye"></i> Nhật Ký Truy Cập Lương (FGA Audit)</h5>
+                        <span class="badge bg-danger">Giám sát chặt chẽ</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped mb-0 text-start">
+                                <thead class="table-secondary">
+                                    <tr>
+                                        <th style="width: 15%">Người Dùng</th>
+                                        <th style="width: 20%">Thời Gian</th>
+                                        <th style="width: 10%">Hành Động</th>
+                                        <th>Câu Lệnh SQL (Bằng chứng)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in audit_logs %}
+                                    <tr>
+                                        <td class="fw-bold text-danger">{{ log.user }}</td>
+                                        <td>{{ log.time|date:"d/m/Y H:i:s" }}</td>
+                                        <td>
+                                            {% if log.action == 'SELECT' %}
+                                            <span class="badge bg-info text-dark">XEM</span>
+                                            {% else %}
+                                            <span class="badge bg-warning text-dark">SỬA</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <code class="text-dark small">{{ log.sql }}</code>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-3">Chưa có ai truy cập vào Lương.</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 mt-4">
+        <div class="card shadow border-warning">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h5 class="m-0"><i class="fas fa-history"></i> Phục Hồi Dữ Liệu Đã Xóa (Oracle Flashback)</h5>
+                <span class="badge bg-dark text-warning">Phạm vi: 15 Phút trước</span>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-light border-warning mb-3">
+                    <small><i class="fas fa-info-circle"></i> Hệ thống tự động so sánh dữ liệu hiện tại với 15 phút trước để
+                        tìm ra các dòng bị xóa.</small>
+                </div>
+    
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0">
+                        <thead class="table-warning">
+                            <tr>
+                                <th>Mã Lịch Hẹn</th>
+                                <th>Mã KH</th>
+                                <th>Mã BS</th>
+                                <th>Ngày Hẹn (Cũ)</th>
+                                <th class="text-center">Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in deleted_items %}
+                            <tr>
+                                <td class="fw-bold text-danger">{{ item.ma_lh }}</td>
+                                <td>{{ item.ma_kh }}</td>
+                                <td>{{ item.manv }}</td>
+                                <td>{{ item.ngay_hen|date:"d/m/Y" }}</td>
+                                <td class="text-center">
+                                    <form action="{% url 'flashback_recovery' %}" method="POST">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="target_id" value="{{ item.ma_lh }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-success fw-bold">
+                                            <i class="fas fa-undo"></i> Khôi Phục Ngay
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted fst-italic">
+                                    Không tìm thấy dữ liệu bị xóa trong 15 phút qua. <br>
+                                    (Hoặc dữ liệu đã bị xóa quá lâu/cấu trúc bảng vừa thay đổi)
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

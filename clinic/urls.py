@@ -23,4 +23,5 @@ urlpatterns = [
     path('customer/add/', views.add_customer, name='add_customer'),
     path('customer/edit/<str:makh>/', views.edit_customer, name='edit_customer'),
     path('customer/delete/<str:makh>/', views.delete_customer, name='delete_customer'),
+
 ]

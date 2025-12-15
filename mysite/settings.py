@@ -90,7 +90,7 @@ WSGI_APPLICATION = 'mysite.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.oracle',
-        'NAME': '172.17.68.194:1521/orclpdb', # Hoặc IP_VMware:1521/orclpdb
+        'NAME': '172.17.81.140:1521/orclpdb', # Hoặc IP_VMware:1521/orclpdb
         'USER': 'CLINIC_ADMIN',
         'PASSWORD': 'Admin123',
     }
@@ -121,7 +121,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 USE_I18N = True
 
